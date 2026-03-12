@@ -111,7 +111,11 @@ async def send_result_and_offer(
         ),
     )
 
-    await bot.send_message(user_id, "ТУТ БУДЕТ ВИДЕО")
+    promo_video = media_path("masterclass_promo.mp4")
+    if promo_video.exists():
+        await bot.send_video(chat_id=user_id, video=FSInputFile(str(promo_video)))
+    else:
+        await bot.send_message(user_id, "ТУТ БУДЕТ ВИДЕО")
 
     if is_paid and masterclass_link and channel_link:
         await send_access_message(bot, user_id, masterclass_link, channel_link)
