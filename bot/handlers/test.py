@@ -125,6 +125,10 @@ async def answer_question(callback: CallbackQuery, state: FSMContext, session: A
         leading_type,
         secondary_type,
         base_data,
-        settings.prodamus_payment_url,
+        channel_link=settings.channel_invite_link,
+        shop_id=settings.yookassa_shop_id,
+        secret_key=settings.yookassa_secret_key,
+        payment_amount=settings.yookassa_payment_amount,
+        return_url=settings.yookassa_return_url,
     )
     await callback.answer()

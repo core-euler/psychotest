@@ -11,7 +11,7 @@ from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from bot.config import get_settings
 from bot.db import SessionLocal, init_db
 from bot.handlers import admin, payment, start, test
-from bot.webhooks.prodamus import build_webhook_app
+from bot.webhooks.yookassa import build_webhook_app
 
 
 class DbSessionMiddleware(BaseMiddleware):

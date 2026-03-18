@@ -13,13 +13,14 @@ async def upsert_payment(
     provider_payment_id: str,
     status: str,
     payload: dict | None = None,
+    provider: str = "yookassa",
 ) -> Payment:
     stmt = select(Payment).where(Payment.provider_payment_id == provider_payment_id)
     existing = (await session.execute(stmt)).scalar_one_or_none()
     if existing is None:
         existing = Payment(
             user_id=user_id,
-            provider="prodamus",
+            provider=provider,
             provider_payment_id=provider_payment_id,
             status=status,
             payload=payload,

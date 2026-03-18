@@ -32,10 +32,13 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
             user.leading_type,
             user.secondary_type,
             test_data,
-            settings.prodamus_payment_url,
             is_paid=user.paid,
             masterclass_link=settings.masterclass_link,
             channel_link=settings.channel_invite_link,
+            shop_id=settings.yookassa_shop_id,
+            secret_key=settings.yookassa_secret_key,
+            payment_amount=settings.yookassa_payment_amount,
+            return_url=settings.yookassa_return_url,
         )
         return
 
