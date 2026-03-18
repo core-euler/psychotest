@@ -39,6 +39,7 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
             secret_key=settings.yookassa_secret_key,
             payment_amount=settings.yookassa_payment_amount,
             return_url=settings.yookassa_return_url,
+            admin_ids=settings.admin_ids,
         )
         return
 

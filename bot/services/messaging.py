@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db import SessionLocal
 from bot.keyboards.payment import payment_kb
-from bot.services.users import get_user, mark_result_sent
-from bot.services.yookassa import create_payment_link
+from bot.services.notifications import notify_admins
+from bot.services.users import get_user, mark_paid, mark_result_sent
+from bot.services.yookassa import create_payment_link, poll_payment_status
 
 logger = logging.getLogger(__name__)
 
 _scheduled_offer_tasks: dict[int, asyncio.Task] = {}
+_payment_poll_tasks: dict[int, asyncio.Task] = {}
 
 PAYMENT_OFFER_TEXT = (
     "Теперь ты знаешь свой тип блогера и форматы, которые тебе подходят.\n\n"
@@ -64,22 +66,111 @@ async def _is_user_paid(user_id: int) -> bool:
         return bool(user and user.paid)
 
 
-async def _create_payment_url(user_id: int, shop_id: str, secret_key: str, amount: str, return_url: str) -> str | None:
+async def _create_payment_and_poll(
+    bot: Bot,
+    user_id: int,
+    shop_id: str,
+    secret_key: str,
+    amount: str,
+    return_url: str,
+    masterclass_link: str,
+    channel_link: str,
+    admin_ids: set[int],
+) -> str | None:
+    """Create YooKassa payment, return confirmation_url, and start polling in background."""
     try:
-        _, confirmation_url = await create_payment_link(
+        payment_id, confirmation_url = await create_payment_link(
             shop_id=shop_id,
             secret_key=secret_key,
             amount=amount,
             user_id=user_id,
             return_url=return_url,
         )
-        return confirmation_url
     except Exception:
         logger.exception("Failed to create YooKassa payment for user %s", user_id)
         return None
 
+    # Cancel any existing poll for this user.
+    existing_poll = _payment_poll_tasks.get(user_id)
+    if existing_poll and not existing_poll.done():
+        existing_poll.cancel()
 
-async def _send_payment_offer(bot: Bot, user_id: int, payment_url: str) -> None:
+    _payment_poll_tasks[user_id] = asyncio.create_task(
+        _poll_and_confirm(bot, user_id, payment_id, shop_id, secret_key, masterclass_link, channel_link, admin_ids)
+    )
+
+    return confirmation_url
+
+
+async def _poll_and_confirm(
+    bot: Bot,
+    user_id: int,
+    payment_id: str,
+    shop_id: str,
+    secret_key: str,
+    masterclass_link: str,
+    channel_link: str,
+    admin_ids: set[int],
+) -> None:
+    """Poll YooKassa for payment status; on success mark paid and send access."""
+    try:
+        status = await poll_payment_status(shop_id, secret_key, payment_id)
+
+        if status == "succeeded":
+            async with SessionLocal() as session:
+                from bot.services.payment import upsert_payment
+
+                await upsert_payment(session, user_id, payment_id, "confirmed")
+                changed = await mark_paid(session, user_id, payment_id)
+
+            if changed:
+                await send_access_message(bot, user_id, masterclass_link, channel_link)
+                user_obj = None
+                async with SessionLocal() as session:
+                    user_obj = await get_user(session, user_id)
+                await notify_admins(
+                    bot,
+                    admin_ids,
+                    (
+                        "Оплата подтверждена (YooKassa)\n"
+                        f"user_id: {user_id}\n"
+                        f"username: @{user_obj.username if user_obj and user_obj.username else '-'}\n"
+                        f"payment_id: {payment_id}"
+                    ),
+                )
+                logger.info("Payment confirmed for user %s, payment %s", user_id, payment_id)
+        elif status == "canceled":
+            logger.info("Payment canceled for user %s, payment %s", user_id, payment_id)
+        else:
+            logger.info("Payment poll timed out for user %s, payment %s", user_id, payment_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Error polling payment for user %s", user_id)
+    finally:
+        _payment_poll_tasks.pop(user_id, None)
+
+
+async def _send_payment_offer(
+    bot: Bot,
+    user_id: int,
+    shop_id: str,
+    secret_key: str,
+    amount: str,
+    return_url: str,
+    masterclass_link: str,
+    channel_link: str,
+    admin_ids: set[int],
+) -> None:
+    payment_url = await _create_payment_and_poll(
+        bot, user_id, shop_id, secret_key, amount, return_url, masterclass_link, channel_link, admin_ids
+    )
+    if not payment_url:
+        await bot.send_message(
+            user_id, "Не удалось создать ссылку на оплату. Попробуйте позже или напишите @vladyslav234."
+        )
+        return
+
     await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
 
 
@@ -90,30 +181,23 @@ async def _schedule_payment_flow(
     secret_key: str,
     amount: str,
     return_url: str,
+    masterclass_link: str,
+    channel_link: str,
+    admin_ids: set[int],
 ) -> None:
     try:
         await asyncio.sleep(120)
         if await _is_user_paid(user_id):
             return
 
-        payment_url = await _create_payment_url(user_id, shop_id, secret_key, amount, return_url)
-        if not payment_url:
-            await bot.send_message(user_id, "Не удалось создать ссылку на оплату. Попробуйте позже или напишите @vladyslav234.")
-            return
-
-        await _send_payment_offer(bot, user_id, payment_url)
+        await _send_payment_offer(bot, user_id, shop_id, secret_key, amount, return_url, masterclass_link, channel_link, admin_ids)
 
         await asyncio.sleep(3600)
         if await _is_user_paid(user_id):
             return
 
-        payment_url_2 = await _create_payment_url(user_id, shop_id, secret_key, amount, return_url)
-        if payment_url_2:
-            await bot.send_message(
-                user_id,
-                "Напоминание: доступ к мастер-классу открыт по кнопке ниже.",
-                reply_markup=payment_kb(payment_url_2),
-            )
+        # Reminder: create a new payment link.
+        await _send_payment_offer(bot, user_id, shop_id, secret_key, amount, return_url, masterclass_link, channel_link, admin_ids)
     finally:
         _scheduled_offer_tasks.pop(user_id, None)
 
@@ -131,8 +215,9 @@ async def send_result_and_offer(
     channel_link: str | None = None,
     shop_id: str = "",
     secret_key: str = "",
-    payment_amount: str = "2990.00",
+    payment_amount: str = "2999.00",
     return_url: str = "",
+    admin_ids: set[int] | None = None,
 ) -> None:
     types = test_data["types"]
     leading = types[leading_code]
@@ -192,7 +277,10 @@ async def send_result_and_offer(
         if existing and not existing.done():
             existing.cancel()
         _scheduled_offer_tasks[user_id] = asyncio.create_task(
-            _schedule_payment_flow(bot, user_id, shop_id, secret_key, payment_amount, return_url)
+            _schedule_payment_flow(
+                bot, user_id, shop_id, secret_key, payment_amount, return_url,
+                masterclass_link or "", channel_link or "", admin_ids or set(),
+            )
         )
 
     await mark_result_sent(session, user_id)

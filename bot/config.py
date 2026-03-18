@@ -17,8 +17,6 @@ class Settings(BaseSettings):
     yookassa_payment_amount: str = Field(default="2999.00", alias="YOOKASSA_PAYMENT_AMOUNT")
     yookassa_return_url: str = Field(default="", alias="YOOKASSA_RETURN_URL")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    webhook_host: str = Field(default="0.0.0.0", alias="WEBHOOK_HOST")
-    webhook_port: int = Field(default=8081, alias="WEBHOOK_PORT")
 
     @property
     def admin_ids(self) -> set[int]:

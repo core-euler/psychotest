@@ -1,7 +1,6 @@
 import asyncio
 import logging
 
-from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -11,7 +10,6 @@ from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from bot.config import get_settings
 from bot.db import SessionLocal, init_db
 from bot.handlers import admin, payment, start, test
-from bot.webhooks.yookassa import build_webhook_app
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -19,15 +17,6 @@ class DbSessionMiddleware(BaseMiddleware):
         async with SessionLocal() as session:
             data["session"] = session
             return await handler(event, data)
-
-
-async def start_webhook_server(settings, bot):
-    app = build_webhook_app(settings, SessionLocal, bot)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, settings.webhook_host, settings.webhook_port)
-    await site.start()
-    return runner
 
 
 async def main() -> None:
@@ -45,11 +34,9 @@ async def main() -> None:
     dp.include_router(payment.router)
     dp.include_router(admin.router)
 
-    runner = await start_webhook_server(settings, bot)
     try:
         await dp.start_polling(bot)
     finally:
-        await runner.cleanup()
         await bot.session.close()
 
 

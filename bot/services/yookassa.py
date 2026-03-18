@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 YOOKASSA_API_URL = "https://api.yookassa.ru/v3/payments"
 
+# Polling: check every 15 seconds for 30 minutes.
+POLL_INTERVAL = 15
+POLL_TIMEOUT = 1800
+
 
 async def create_payment_link(
     shop_id: str,
@@ -44,7 +48,7 @@ async def create_payment_link(
 
 
 async def fetch_payment(shop_id: str, secret_key: str, payment_id: str) -> dict | None:
-    """Fetch payment from YooKassa API to verify status."""
+    """Fetch payment from YooKassa API to check status."""
     auth = aiohttp.BasicAuth(shop_id, secret_key)
     url = f"{YOOKASSA_API_URL}/{payment_id}"
 
@@ -52,5 +56,37 @@ async def fetch_payment(shop_id: str, secret_key: str, payment_id: str) -> dict 
         async with session.get(url, auth=auth) as resp:
             if resp.status == 200:
                 return await resp.json()
-            logger.warning("YooKassa fetch failed: %s", resp.status)
+            logger.warning("YooKassa fetch payment %s failed: %s", payment_id, resp.status)
             return None
+
+
+async def poll_payment_status(
+    shop_id: str,
+    secret_key: str,
+    payment_id: str,
+    interval: int = POLL_INTERVAL,
+    timeout: int = POLL_TIMEOUT,
+) -> str | None:
+    """Poll YooKassa until payment succeeds, is canceled, or timeout.
+
+    Returns final status: 'succeeded', 'canceled', or None on timeout.
+    """
+    import asyncio
+
+    elapsed = 0
+    while elapsed < timeout:
+        await asyncio.sleep(interval)
+        elapsed += interval
+
+        data = await fetch_payment(shop_id, secret_key, payment_id)
+        if not data:
+            continue
+
+        status = data.get("status")
+        logger.debug("YooKassa poll payment %s: status=%s (elapsed %ds)", payment_id, status, elapsed)
+
+        if status in ("succeeded", "canceled"):
+            return status
+
+    logger.info("YooKassa poll timeout for payment %s after %ds", payment_id, timeout)
+    return None
