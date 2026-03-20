@@ -175,7 +175,7 @@ async def _send_payment_offer(
         )
         return
 
-    offer_image = media_path("payment_offer.png")
+    offer_image = media_path("payment_offer.jpg")
     logger.info("Offer image exists=%s path=%s", offer_image.exists(), offer_image)
     if offer_image.exists():
         await bot.send_photo(chat_id=user_id, photo=FSInputFile(str(offer_image)))
