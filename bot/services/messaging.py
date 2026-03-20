@@ -18,6 +18,8 @@ _scheduled_offer_tasks: dict[int, asyncio.Task] = {}
 _payment_poll_tasks: dict[int, asyncio.Task] = {}
 
 PAYMENT_OFFER_TEXT = (
+    "Приглашение в закрытый канал\n"
+    "«Блог без боли»\n\n"
     "Теперь ты знаешь свой тип блогера и форматы, которые тебе подходят.\n\n"
     "Но главный вопрос остаётся:\n"
     "чем их заполнять и как превратить блог в инструмент, который даёт охваты и продажи.\n\n"
@@ -171,7 +173,16 @@ async def _send_payment_offer(
         )
         return
 
-    await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
+    offer_image = media_path("payment_offer.png")
+    if offer_image.exists():
+        await bot.send_photo(
+            chat_id=user_id,
+            photo=FSInputFile(str(offer_image)),
+            caption=PAYMENT_OFFER_TEXT,
+            reply_markup=payment_kb(payment_url),
+        )
+    else:
+        await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
 
 
 async def _schedule_payment_flow(
@@ -259,15 +270,17 @@ async def send_result_and_offer(
             ),
         )
 
-    # 4. Pre-video text
-    await bot.send_message(user_id, PRE_VIDEO_TEXT)
-
-    # 5. Promo video
-    promo_video = media_path("masterclass_promo.mp4")
-    if promo_video.exists():
-        await bot.send_video(chat_id=user_id, video=FSInputFile(str(promo_video)))
-    else:
-        await bot.send_message(user_id, "ТУТ БУДЕТ ВИДЕО")
+    # 4. Pre-video text + link button
+    await bot.send_message(
+        user_id,
+        PRE_VIDEO_TEXT,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(
+                text="Смотреть инструкцию",
+                url="https://drive.google.com/file/d/12ScNmGtzUkWQC-Avvxdpewb4JEiKcDT1/view?usp=sharing",
+            )]]
+        ),
+    )
 
     # 6. Payment offer (delayed) or access message
     if is_paid and masterclass_link:
