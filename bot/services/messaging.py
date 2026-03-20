@@ -302,7 +302,9 @@ async def send_result_and_offer(
 async def send_access_message(bot: Bot, user_id: int, masterclass_link: str, channel_link: str) -> None:
     await bot.send_message(
         user_id,
-        "Оплата подтверждена. Доступы:\n"
+        "Оплата прошла. Мастер класс можно посмотреть в любое удобное время. "
+        "Все полезные материалы будут хранится в основном канале на который ты уже подписался.\n\n"
+        "Доступы:\n"
         f"- Мастер-класс: {masterclass_link}\n"
         f"- Канал участников: {channel_link}",
     )
