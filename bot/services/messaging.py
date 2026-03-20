@@ -175,14 +175,8 @@ async def _send_payment_offer(
 
     offer_image = media_path("payment_offer.png")
     if offer_image.exists():
-        await bot.send_photo(
-            chat_id=user_id,
-            photo=FSInputFile(str(offer_image)),
-            caption=PAYMENT_OFFER_TEXT,
-            reply_markup=payment_kb(payment_url),
-        )
-    else:
-        await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
+        await bot.send_photo(chat_id=user_id, photo=FSInputFile(str(offer_image)))
+    await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
 
 
 async def _schedule_payment_flow(
