@@ -203,6 +203,10 @@ async def _schedule_payment_flow(
 
         # Reminder: create a new payment link.
         await _send_payment_offer(bot, user_id, shop_id, secret_key, amount, return_url, masterclass_link, channel_link, admin_ids)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Error in payment flow for user %s", user_id)
     finally:
         _scheduled_offer_tasks.pop(user_id, None)
 
