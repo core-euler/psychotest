@@ -164,9 +164,11 @@ async def _send_payment_offer(
     channel_link: str,
     admin_ids: set[int],
 ) -> None:
+    logger.info("_send_payment_offer called for user %s", user_id)
     payment_url = await _create_payment_and_poll(
         bot, user_id, shop_id, secret_key, amount, return_url, masterclass_link, channel_link, admin_ids
     )
+    logger.info("Payment URL for user %s: %s", user_id, payment_url)
     if not payment_url:
         await bot.send_message(
             user_id, "Не удалось создать ссылку на оплату. Попробуйте позже или напишите @vladyslav234."
@@ -174,9 +176,12 @@ async def _send_payment_offer(
         return
 
     offer_image = media_path("payment_offer.png")
+    logger.info("Offer image exists=%s path=%s", offer_image.exists(), offer_image)
     if offer_image.exists():
         await bot.send_photo(chat_id=user_id, photo=FSInputFile(str(offer_image)))
+        logger.info("Photo sent to user %s", user_id)
     await bot.send_message(user_id, PAYMENT_OFFER_TEXT, reply_markup=payment_kb(payment_url))
+    logger.info("Payment offer message sent to user %s", user_id)
 
 
 async def _schedule_payment_flow(
