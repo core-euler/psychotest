@@ -35,6 +35,10 @@ async def main() -> None:
     dp.include_router(admin.router)
 
     try:
+        try:
+            await bot.set_my_name(name="Тест на типажи блогеров/ Малиновский")
+        except Exception:
+            logging.getLogger(__name__).warning("Failed to update bot name on startup", exc_info=True)
         await dp.start_polling(bot)
     finally:
         await bot.session.close()

@@ -3,10 +3,13 @@ import logging
 from pathlib import Path
 
 from aiogram import Bot
+from aiogram.enums import ChatMemberStatus
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db import SessionLocal
+from bot.keyboards.test import pre_result_kb
 from bot.keyboards.payment import payment_kb
 from bot.services.notifications import notify_admins
 from bot.services.users import get_user, mark_paid, mark_result_sent
@@ -45,6 +48,15 @@ PRE_VIDEO_TEXT = (
     "Нажимай на кнопку👇"
 )
 
+PRE_RESULT_SUBSCRIPTION_TEXT = (
+    "Бот сейчас считает твой результат.\n\n"
+    "Пока ждёшь — подпишись на канал.\n"
+    "В закрепе есть разбор всех шести типажей и понятные инструкции, что делать с каждым из них.\n\n"
+    "Твой типаж со временем может меняться — и тогда эта информация станет для тебя ключевой.\n\n"
+    "Если после подписки результат не появился — напиши техническому специалисту "
+    "👉@vladyslav234 он быстро поможет"
+)
+
 
 def media_path(name: str) -> Path:
     return Path(__file__).resolve().parents[1] / "media" / name
@@ -66,6 +78,28 @@ async def _is_user_paid(user_id: int) -> bool:
     async with SessionLocal() as session:
         user = await get_user(session, user_id)
         return bool(user and user.paid)
+
+
+async def send_pre_result_subscription_prompt(bot: Bot, user_id: int, channel_link: str) -> None:
+    await bot.send_message(user_id, PRE_RESULT_SUBSCRIPTION_TEXT, reply_markup=pre_result_kb(channel_link))
+
+
+async def is_user_subscribed(bot: Bot, user_id: int, channel_chat_id: int | str | None) -> bool:
+    if channel_chat_id is None:
+        logger.warning("Channel chat id is not configured; subscription check is unavailable")
+        return False
+
+    try:
+        member = await bot.get_chat_member(channel_chat_id, user_id)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        logger.exception("Failed to check channel subscription for user %s", user_id)
+        return False
+
+    return member.status in {
+        ChatMemberStatus.CREATOR,
+        ChatMemberStatus.ADMINISTRATOR,
+        ChatMemberStatus.MEMBER,
+    }
 
 
 async def _create_payment_and_poll(
@@ -263,17 +297,7 @@ async def send_result_and_offer(
         ),
     )
 
-    # 3. Channel subscription link (free, always sent)
-    if channel_link:
-        await bot.send_message(
-            user_id,
-            "Подписывайся на наш канал:",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Подписаться на канал", url=channel_link)]]
-            ),
-        )
-
-    # 4. Pre-video text + link button
+    # 3. Pre-video text + link button
     await bot.send_message(
         user_id,
         PRE_VIDEO_TEXT,
@@ -285,7 +309,7 @@ async def send_result_and_offer(
         ),
     )
 
-    # 6. Payment offer (delayed) or access message
+    # 4. Payment offer (delayed) or access message
     if is_paid and masterclass_link:
         await send_access_message(bot, user_id, masterclass_link, channel_link or "")
     else:

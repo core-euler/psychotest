@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import get_settings
 from bot.keyboards.test import question_kb
-from bot.services.messaging import send_result_and_offer
+from bot.services.messaging import send_pre_result_subscription_prompt
 from bot.services.scoring import add_scores, compute_type_from_scores
 from bot.services.test_data import load_test_data
 from bot.services.users import save_test_results
@@ -83,6 +83,7 @@ async def answer_question(callback: CallbackQuery, state: FSMContext, session: A
         await callback.answer()
         return
     selected_scores = selected["scores"]
+    await callback.answer()
 
     scores = add_scores(data.get("scores", {}), selected_scores)
     await state.update_data(scores=scores)
@@ -91,7 +92,6 @@ async def answer_question(callback: CallbackQuery, state: FSMContext, session: A
     if pick_no == 1:
         await state.update_data(pick_no=2, first_pick_option=option_code)
         await _send_question(callback, q_index, 2, exclude_option_id=option_code)
-        await callback.answer()
         return
 
     # Second pick: move to next question.
@@ -99,7 +99,6 @@ async def answer_question(callback: CallbackQuery, state: FSMContext, session: A
     if next_index < 8:
         await state.update_data(q_index=next_index, pick_no=1, first_pick_option=None)
         await _send_question(callback, next_index, 1)
-        await callback.answer()
         return
 
     all_data = await state.get_data()
@@ -118,18 +117,4 @@ async def answer_question(callback: CallbackQuery, state: FSMContext, session: A
     await state.clear()
 
     await callback.message.delete()
-    await send_result_and_offer(
-        callback.bot,
-        session,
-        user_id,
-        leading_type,
-        secondary_type,
-        base_data,
-        channel_link=settings.channel_invite_link,
-        shop_id=settings.yookassa_shop_id,
-        secret_key=settings.yookassa_secret_key,
-        payment_amount=settings.yookassa_payment_amount,
-        return_url=settings.yookassa_return_url,
-        admin_ids=settings.admin_ids,
-    )
-    await callback.answer()
+    await send_pre_result_subscription_prompt(callback.bot, user_id, settings.channel_invite_link)

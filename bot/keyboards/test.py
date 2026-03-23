@@ -7,6 +7,15 @@ def start_test_kb() -> InlineKeyboardMarkup:
     )
 
 
+def pre_result_kb(channel_url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Подписаться", url=channel_url)],
+            [InlineKeyboardButton(text="Получить результат", callback_data="result:check_subscription")],
+        ]
+    )
+
+
 def question_kb(q_index: int, pick_no: int, options: list[dict], exclude_option_id: str | None = None) -> InlineKeyboardMarkup:
     filtered = [opt for opt in options if opt["id"] != exclude_option_id]
     buttons = [

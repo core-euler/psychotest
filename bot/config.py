@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     admin_ids_raw: str = Field(alias="ADMIN_IDS")
     masterclass_link: str = Field(alias="MASTERCLASS_LINK")
     channel_invite_link: str = Field(alias="CHANNEL_INVITE_LINK")
+    channel_chat_id_raw: str = Field(default="", alias="CHANNEL_CHAT_ID")
     yookassa_shop_id: str = Field(alias="YOOKASSA_SHOP_ID")
     yookassa_secret_key: str = Field(alias="YOOKASSA_SECRET_KEY")
     yookassa_payment_amount: str = Field(default="2999.00", alias="YOOKASSA_PAYMENT_AMOUNT")
@@ -21,6 +22,15 @@ class Settings(BaseSettings):
     @property
     def admin_ids(self) -> set[int]:
         return {int(x.strip()) for x in self.admin_ids_raw.split(",") if x.strip()}
+
+    @property
+    def channel_chat_id(self) -> int | str | None:
+        raw = self.channel_chat_id_raw.strip()
+        if not raw:
+            return None
+        if raw.lstrip("-").isdigit():
+            return int(raw)
+        return raw
 
 
 @lru_cache(maxsize=1)
